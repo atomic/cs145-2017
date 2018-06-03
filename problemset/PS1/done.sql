@@ -1,4 +1,3 @@
-
 -- Query 1
 SELECT * From flight_delays LIMIT 5;
 
@@ -31,7 +30,7 @@ SELECT * from weekdays;
 
 SELECT weekday_name,AVG(arr_delay) AS avg_delay -- default
 FROM flight_delays, weekdays
-  WHERE day_of_week = weekday_id
+WHERE day_of_week = weekday_id
 GROUP BY day_of_week ORDER BY avg_delay DESC;
 
 SELECT weekday_name,AVG(arr_delay) AS avg_delay -- using join
@@ -51,7 +50,7 @@ select distinct origin_airport_id from flight_delays WHERE origin_city_name LIKE
 select airport_id,airport_name from airports WHERE airport_name LIKE '%San Francisco International%'; -- this one
 
 select distinct airports.airport_name from flight_delays, airports
-  WHERE flight_delays.origin_airport_id = airport_id;
+WHERE flight_delays.origin_airport_id = airport_id;
 
 select * from airlines;
 SELECT COUNT(*),AVG(arr_delay) FROM  flight_delays WHERE origin_city_name = 'San Francisco, CA' GROUP BY airline_id;
@@ -59,9 +58,9 @@ SELECT COUNT(*),AVG(arr_delay) FROM  flight_delays WHERE origin_city_name = 'San
 SELECT airlines.airline_name, AVG(arr_delay) AS avg_arr_delay
 FROM flight_delays
   JOIN airlines ON flight_delays.airline_id = airlines.airline_id
-  WHERE origin_city_name = 'San Francisco, CA'
-  GROUP BY flight_delays.airline_id
-  ORDER BY avg_arr_delay DESC;  -- note: different values than the solution
+WHERE origin_city_name = 'San Francisco, CA'
+GROUP BY flight_delays.airline_id
+ORDER BY avg_arr_delay DESC;  -- note: different values than the solution
 
 -- Query 6: What proportion of airlines are regularly late?
 -- Yeesh, there are a lot of late flights! How many airlines are regularly late?
@@ -77,21 +76,21 @@ GROUP BY airline_id
 HAVING AVG(arr_delay) >= 10 AND arr_delay IS NOT NULL;
 
 SELECT (SELECT Count(*) from flight_delays
-  GROUP BY airline_id
-  HAVING AVG(arr_delay) >= 10 AND arr_delay IS NOT NULL);
+GROUP BY airline_id
+HAVING AVG(arr_delay) >= 10 AND arr_delay IS NOT NULL);
 
 
 -- another try
 SELECT subquery_badairline.ids
 FROM
   (SELECT distinct x.airline_id as ids from flight_delays x
-    GROUP BY       x.airline_id
-    HAVING AVG(x.arr_delay) >= 10 AND x.arr_delay IS NOT NULL) as subquery_badairline;
+  GROUP BY       x.airline_id
+  HAVING AVG(x.arr_delay) >= 10 AND x.arr_delay IS NOT NULL) as subquery_badairline;
 
 -- good airlines
 SELECT DISTINCT airline_id FROM flight_delays
-    WHERE airline_id NOT IN
-    ( SELECT x.airline_id from flight_delays x
+WHERE airline_id NOT IN
+      ( SELECT x.airline_id from flight_delays x
       GROUP BY x.airline_id
       HAVING AVG(arr_delay) >= 10 AND arr_delay IS NOT NULL);
 
@@ -104,14 +103,14 @@ WHERE airline_id IN
 
 
 SELECT COUNT(DISTINCT airline_id)*1.0 as bad_airline
-  from flight_delays
-  WHERE airline_id IN
-        (
-          SELECT airline_id
-          from flight_delays
-          GROUP BY airline_id
-          HAVING AVG(arr_delay) >= 10 AND arr_delay IS NOT NULL
-        );
+from flight_delays
+WHERE airline_id IN
+      (
+        SELECT airline_id
+        from flight_delays
+        GROUP BY airline_id
+        HAVING AVG(arr_delay) >= 10 AND arr_delay IS NOT NULL
+      );
 
 -- The only one that works
 SELECT late/(late+good) AS 'late_proportion'FROM
@@ -156,9 +155,9 @@ SELECT late/(late+good) AS 'late_proportion'FROM
 SELECT mean_x, mean_y, f.arr_delay, f.dep_delay FROM
   (
     SELECT
-    ( SELECT AVG(x.arr_delay) FROM flight_delays x ) mean_x,
-    ( SELECT AVG(y.dep_delay) FROM flight_delays y ) mean_y
-  ),
+      ( SELECT AVG(x.arr_delay) FROM flight_delays x ) mean_x,
+      ( SELECT AVG(y.dep_delay) FROM flight_delays y ) mean_y
+    ),
   flight_delays f;
 
 SELECT ((f.arr_delay - mean_x)*(f.dep_delay - mean_y)) as products FROM
@@ -167,7 +166,7 @@ SELECT ((f.arr_delay - mean_x)*(f.dep_delay - mean_y)) as products FROM
       ( SELECT AVG(x.arr_delay) FROM flight_delays x ) mean_x,
       ( SELECT AVG(y.dep_delay) FROM flight_delays y ) mean_y
     ),
-flight_delays f;
+  flight_delays f;
 
 SELECT sum(products), count(products)
 FROM (
@@ -204,6 +203,58 @@ FROM (
 -- and one to compute the average arrival delay for flights before July 24th, and then join the two to calculate the increase in delay.
 SELECT DISTINCT flight_delays.day_of_week FROM flight_delays;
 
+-- select all flight on/after july 24th
+SELECT * from flight_delays
+WHERE day_of_month >= 24;
+
+-- select all flight on/after july 24th, average arrival delay increase
+SELECT F.airline_id, A.airline_name, arr_delay
+from flight_delays F
+  JOIN airlines A on A.airline_id = F.airline_id
+WHERE day_of_month >= 24
+GROUP BY F.airline_id;
+
+-- query the absolute increase in subsequent delay first
+
+SELECT airline_id, day_of_month, AVG(arr_delay) from flight_delays WHERE day_of_month BETWEEN 23 AND 30 GROUP BY airline_id,day_of_month ORDER BY airline_id;
+SELECT airline_id, day_of_month, AVG(arr_delay) from flight_delays WHERE day_of_month BETWEEN 24 AND 31 GROUP BY airline_id,day_of_month ORDER BY airline_id;
+
+SELECT * from
+  (
+      (SELECT AVG(arr_delay) as 'avg_delay' from flight_delays WHERE day_of_month BETWEEN 23 AND 30 GROUP BY airline_id,day_of_month ORDER BY airline_id) as A
+        join
+      (SELECT AVG(arr_delay) as 'avg_delay' from flight_delays WHERE day_of_month BETWEEN 24 AND 31 GROUP BY airline_id,day_of_month ORDER BY airline_id) as B
+  );
+
+
+WITH A AS (SELECT airline_id,day_of_month,AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month BETWEEN 23 AND 30 GROUP BY airline_id,day_of_month ORDER BY airline_id),
+     B AS (SELECT airline_id,day_of_month,AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month BETWEEN 24 AND 31 GROUP BY airline_id,day_of_month ORDER BY airline_id)
+  SELECT A.airline_id, A.day_of_month, A.delay, B.airline_id,B.day_of_month,B.delay, ABS(A.delay - B.delay), airline_name
+--     SELECT airline_name, A.delay - B.delay, ABS(A.delay - B.delay) as 'absolute increase'
+FROM A JOIN B
+ON A.airline_id = B.airline_id AND A.day_of_month = (B.day_of_month - 1)
+JOIN airlines ON A.airline_id = airlines.airline_id
+;
+
+SELECT airline_id, AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month < 24 GROUP BY airline_id;
+SELECT airline_id, AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month >= 24 GROUP BY airline_id;
+
+-- before filtering down
+WITH A AS (SELECT airline_id, AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month < 24 GROUP BY airline_id),
+     B AS (SELECT airline_id, AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month >= 24 GROUP BY airline_id)
+  SELECT A.delay, B.delay, ABS(A.delay - B.delay)
+  FROM A JOIN B ON A.airline_id = B.airline_id
+  ORDER BY (A.delay - B.delay);
+
+-- final answer
+WITH A AS (SELECT airline_id, AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month < 24 GROUP BY airline_id),
+    B AS (SELECT airline_id, AVG(arr_delay) as 'delay' from flight_delays WHERE day_of_month >= 24 GROUP BY airline_id)
+SELECT airline_name, ABS(A.delay - B.delay) as 'delay_increase'
+FROM A
+  JOIN B ON A.airline_id = B.airline_id
+  JOIN airlines ON A.airline_id = airlines.airline_id
+ORDER BY (A.delay - B.delay) LIMIT  1;
+
 -- Query 9: Of Hipsters and Anarchists
 -- I'm keen to visit both Portland (PDX) and Eugene (EUG), but I can't fit both into the same trip.
 -- To maximize my frequent flier mileage, I'd like to use the same flight for each. Which airlines fly both SFO -> PDX and SFO -> EUG?
@@ -215,9 +266,9 @@ SELECT airport_name from airports WHERE airport_name LIKE '%Eugene%';
 
 SELECT origin_airport_id, dest_airport_id, a1.airport_name, a2.airport_name, al.airline_name
 FROM flight_delays
-JOIN airports a1 ON a1.airport_id = origin_airport_id
-JOIN airports a2 ON a2.airport_id = dest_airport_id
-JOIN airlines al ON al.airline_id = flight_delays.airline_id
+  JOIN airports a1 ON a1.airport_id = origin_airport_id
+  JOIN airports a2 ON a2.airport_id = dest_airport_id
+  JOIN airlines al ON al.airline_id = flight_delays.airline_id
 WHERE a1.airport_name LIKE '%San Francisco International%' AND
       (
         (a2.airport_name LIKE '%Portland International')
@@ -240,9 +291,32 @@ WHERE a1.airport_name LIKE '%San Francisco International' AND
 ;
 
 -- Query 10: Decision Fatigue and Equidistance
--- I'm flying back to Stanford from Chicago later this month, and I can fly out of either Midway (MDW) or O'Hare (ORD)
--- and can fly into either San Francisco (SFO), San Jose (SJC), or Oakland (OAK).
--- If this month is like July, which leg will have the shortest arrival delay for flights leaving Chicago after 2PM local time?
--- In the cell below, write a single SQL query that returns the average arrival delay of flights departing either MDW or ORD after 2PM local time (crs_dep_time) and arriving at one of SFO, SJC, or OAK.
--- Group by departure and arrival airport and return results descending by arrival delay.
--- Note: the crs_dep_time field is an integer formatted as hhmm (e.g. 4:15pm is 1615)
+
+SELECT airport_name,airport_id from airports WHERE
+  airport_name LIKE '%San Francisco International%' OR
+  airport_name LIKE '%San Jose, CA%' OR
+  airport_name LIKE '%Oakland%CA%International%';
+
+-- In the cell below, write a single SQL query that returns the average arrival delay of flights departing either
+-- MDW or ORD after 2PM local time.
+SELECT AVG(arr_delay) FROM flight_delays
+WHERE
+  origin_airport_id IN (
+    SELECT airport_id from airports WHERE
+      airport_name LIKE '%San Francisco International%' OR
+      airport_name LIKE '%San Jose, CA%' OR
+      airport_name LIKE '%Oakland%CA%International%') AND
+  dest_airport_id IN (
+    SELECT airport_id from airports WHERE
+      airport_name LIKE '%Chicago%Midway%' OR
+      airport_name LIKE '%Chicago%Hare%') AND
+  crs_dep_time > 1400;
+
+-- Correct Number 10
+SELECT origin, dest, AVG(arr_delay) as 'avg_delay' from flight_delays
+WHERE
+  origin IN ('MDW','ORD') AND
+  dest IN ('SFO', 'SJC', 'OAK') AND
+  crs_dep_time > 1400
+GROUP BY origin, dest
+ORDER BY avg_delay DESC;
